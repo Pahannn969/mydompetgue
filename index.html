@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="My Dompet">
-  <meta name="description" content="Catat tabungan harian dan pantau progres target HP.">
+  <meta name="description" content="Catat pendapatan, pengeluaran harian, dan tabungan dalam satu tempat.">
   <link rel="manifest" href="./manifest.json">
   <link rel="apple-touch-icon" href="./icon-192.png">
   <title>My Dompet</title>
@@ -63,6 +63,30 @@
       <div class="stat"><div class="stat-label">Rata-rata / setoran</div><div class="stat-value" id="averageTotal">Rp0</div></div>
     </section>
 
+    <div class="section-head"><h2>Keuangan hari ini</h2><span class="eyebrow" id="todayLabel">Hari ini</span></div>
+    <section class="daily-stats">
+      <div class="daily-stat"><div class="stat-label">Pendapatan</div><div class="stat-value money-positive" id="todayIncome">Rp0</div></div>
+      <div class="daily-stat"><div class="stat-label">Pengeluaran</div><div class="stat-value money-negative" id="todayExpense">Rp0</div></div>
+      <div class="daily-stat daily-net"><div class="stat-label">Sisa uang hari ini</div><div class="stat-value" id="todayNet">Rp0</div></div>
+    </section>
+
+    <div class="section-head"><h2>Catat keuangan</h2><span class="eyebrow">Pendapatan & pengeluaran</span></div>
+    <section class="panel">
+      <div class="type-tabs"><button type="button" class="type-tab active" id="incomeTab">＋ Pendapatan</button><button type="button" class="type-tab" id="expenseTab">− Pengeluaran</button></div>
+      <form id="moneyForm">
+        <div class="form-group"><label for="moneyAmount">Nominal (Rp)</label><input class="field" id="moneyAmount" type="number" min="1" step="1000" inputmode="numeric" placeholder="Contoh: 170000" required></div>
+        <div class="input-row">
+          <div class="form-group"><label for="moneyDate">Tanggal</label><input class="field" id="moneyDate" type="date" required></div>
+          <div class="form-group"><label for="moneyCategory">Kategori</label><select class="field" id="moneyCategory"><option>Gaji harian</option><option>Pendapatan tambahan</option><option>Bonus</option><option>Lainnya</option></select></div>
+        </div>
+        <div class="form-group"><label for="moneyNote">Keterangan (opsional)</label><input class="field" id="moneyNote" type="text" maxlength="70" placeholder="Contoh: gaji kerja hari ini"></div>
+        <button class="primary" type="submit" id="moneySubmit">＋ Simpan pendapatan</button>
+      </form>
+      <p class="note">Catatan pendapatan dan pengeluaran terpisah dari setoran tabungan. Sisa uang = pendapatan − pengeluaran, sebelum menghitung setoran tabungan.</p>
+    </section>
+    <div class="section-head"><h2>Riwayat keuangan</h2><span class="eyebrow">Pendapatan & pengeluaran</span></div>
+    <section class="history" id="moneyHistory"></section>
+
     <div class="section-head"><h2>Tambah tabungan</h2><span class="eyebrow">Catat setoran</span></div>
     <section class="panel">
       <div class="quick-grid">
@@ -107,10 +131,10 @@
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
   };
-  let state = {target:13500000, starting:0, entries:[]};
+  let state = {target:13500000, starting:0, entries:[], incomes:[], expenses:[]};
   try {
     const saved = JSON.parse(localStorage.getItem(KEY) || "null");
-    if (saved && Array.isArray(saved.entries)) state = {...state,...saved};
+    if (saved && Array.isArray(saved.entries)) state = {...state,...saved, incomes:Array.isArray(saved.incomes)?saved.incomes:[], expenses:Array.isArray(saved.expenses)?saved.expenses:[]};
   } catch(e) {}
   const $ = id => document.getElementById(id);
   const amount = $("amount");
@@ -125,6 +149,21 @@
     });
   });
   amount.value = chosen;
+
+  let moneyType = "income";
+  const moneyAmount = $("moneyAmount"), moneyDate = $("moneyDate"), moneyCategory = $("moneyCategory");
+  moneyDate.value = today(); moneyAmount.value = 170000;
+  function setMoneyType(type){
+    moneyType=type;
+    $("incomeTab").classList.toggle("active",type==="income");$("expenseTab").classList.toggle("active",type==="expense");
+    const opts=type==="income"?["Gaji harian","Pendapatan tambahan","Bonus","Lainnya"]:["Jajan","Nongkrong","Kopi","Ngerental","Lainnya"];
+    moneyCategory.innerHTML=opts.map(v=>`<option>${v}</option>`).join("");
+    $("moneySubmit").textContent=type==="income"?"＋ Simpan pendapatan":"− Simpan pengeluaran";
+    moneyAmount.placeholder=type==="income"?"Contoh: 170000":"Contoh: 25000";
+    if(type==="income" && !moneyAmount.value) moneyAmount.value=170000;
+  }
+  $("incomeTab").addEventListener("click",()=>setMoneyType("income"));
+  $("expenseTab").addEventListener("click",()=>setMoneyType("expense"));
 
   function save(){ try { localStorage.setItem(KEY, JSON.stringify(state)); } catch(e) { toast("Gagal menyimpan data di browser"); } }
   function total(){ return state.starting + state.entries.reduce((sum,e)=>sum+e.amount,0); }
@@ -141,6 +180,17 @@
     const monthSum=monthEntries.reduce((s,e)=>s+e.amount,0);
     $("monthTotal").textContent=fmt(monthSum);
     $("averageTotal").textContent=fmt(state.entries.length?state.entries.reduce((s,e)=>s+e.amount,0)/state.entries.length:0);
+    const todayIncome=state.incomes.filter(e=>e.date===today()).reduce((s,e)=>s+e.amount,0);
+    const todayExpense=state.expenses.filter(e=>e.date===today()).reduce((s,e)=>s+e.amount,0);
+    $("todayLabel").textContent=new Date().toLocaleDateString("id-ID",{day:"numeric",month:"short"});
+    $("todayIncome").textContent=fmt(todayIncome);$("todayExpense").textContent=fmt(todayExpense);$("todayNet").textContent=fmt(todayIncome-todayExpense);
+    const moneyHistory=$("moneyHistory");
+    const allMoney=[...state.incomes.map(e=>({...e,type:"income"})),...state.expenses.map(e=>({...e,type:"expense"}))].sort((a,b)=>b.date.localeCompare(a.date)||b.created-a.created);
+    if(!allMoney.length) moneyHistory.innerHTML='<div class="panel empty">Belum ada catatan pendapatan atau pengeluaran.</div>';
+    else {
+      moneyHistory.innerHTML=allMoney.map(e=>`<div class="entry"><div class="entry-icon" style="background:${e.type==="income"?"#c7f36b17":"#ff8c8317"};color:${e.type==="income"?"var(--lime)":"var(--red)"}">${e.type==="income"?"＋":"−"}</div><div class="entry-info"><div class="entry-title">${escapeHTML(e.category)}${e.note?" · "+escapeHTML(e.note):""}</div><div class="entry-date">${new Date(e.date+"T12:00:00").toLocaleDateString("id-ID",{day:"numeric",month:"short",year:"numeric"})}</div></div><div class="entry-amount ${e.type==="income"?"money-positive":"money-negative"}">${e.type==="income"?"+":"−"}${fmt(e.amount)}</div><button class="delete" data-money-delete="${e.id}" data-money-type="${e.type}" aria-label="Hapus catatan">×</button></div>`).join("");
+      moneyHistory.querySelectorAll("[data-money-delete]").forEach(btn=>btn.addEventListener("click",()=>{if(confirm("Hapus catatan keuangan ini?")){const arr=btn.dataset.moneyType==="income"?state.incomes:state.expenses;const idx=arr.findIndex(e=>e.id===btn.dataset.moneyDelete);if(idx>=0)arr.splice(idx,1);save();render();toast("Catatan dihapus");}}));
+    }
     const history=$("history");
     const entries=[...state.entries].sort((a,b)=>b.date.localeCompare(a.date)||b.created-b.created);
     if(!entries.length){history.innerHTML='<div class="panel empty">Belum ada setoran.<br>Catat setoran pertama lu di atas.</div>';return;}
@@ -148,6 +198,12 @@
     history.querySelectorAll("[data-delete]").forEach(btn=>btn.addEventListener("click",()=>{if(confirm("Hapus catatan setoran ini?")){state.entries=state.entries.filter(e=>e.id!==btn.dataset.delete);save();render();toast("Setoran dihapus");}}));
   }
   function escapeHTML(s){return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
+  $("moneyForm").addEventListener("submit",e=>{
+    e.preventDefault();const n=Math.floor(Number(moneyAmount.value));
+    if(!Number.isFinite(n)||n<1){toast("Masukkan nominal yang benar");return;}
+    const record={id:Date.now().toString(36)+Math.random().toString(36).slice(2,6),amount:n,date:moneyDate.value||today(),category:moneyCategory.value,note:$("moneyNote").value.trim(),created:Date.now()};
+    (moneyType==="income"?state.incomes:state.expenses).push(record);save();render();moneyAmount.value="";$("moneyNote").value="";toast(moneyType==="income"?"Pendapatan dicatat":"Pengeluaran dicatat");
+  });
   $("depositForm").addEventListener("submit",e=>{
     e.preventDefault();const n=Math.floor(Number(amount.value));
     if(!Number.isFinite(n)||n<1){toast("Masukkan nominal yang benar");return;}
@@ -164,11 +220,11 @@
   });
   $("resetBtn").addEventListener("click",()=>{
     if(confirm("Yakin hapus seluruh riwayat, target, dan saldo awal? Data ini tidak bisa dipulihkan.")){
-      state={target:13500000,starting:0,entries:[]};save();render();$("modalBack").classList.remove("open");toast("Data direset");
+      state={target:13500000,starting:0,entries:[],incomes:[],expenses:[]};save();render();$("modalBack").classList.remove("open");toast("Data direset");
     }
   });
   $("exportBtn").addEventListener("click",()=>{
-    const rows=[["Tanggal","Nominal","Keterangan"],...state.entries.map(e=>[e.date,e.amount,e.category])];
+    const rows=[["Jenis","Tanggal","Nominal","Kategori","Keterangan"],...state.entries.map(e=>["Tabungan",e.date,e.amount,e.category,""]),...state.incomes.map(e=>["Pendapatan",e.date,e.amount,e.category,e.note||""]),...state.expenses.map(e=>["Pengeluaran",e.date,e.amount,e.category,e.note||""])];
     const csv=rows.map(row=>row.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(",")).join("\r\n");
     const blob=new Blob(["\ufeff"+csv],{type:"text/csv;charset=utf-8;"});
     const url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download="riwayat-my-dompet.csv";a.click();URL.revokeObjectURL(url);
