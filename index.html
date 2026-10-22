@@ -74,7 +74,7 @@
     <section class="panel">
       <div class="type-tabs"><button type="button" class="type-tab active" id="incomeTab">＋ Pendapatan</button><button type="button" class="type-tab" id="expenseTab">− Pengeluaran</button></div>
       <form id="moneyForm">
-        <div class="form-group"><label for="moneyAmount">Nominal (Rp)</label><input class="field" id="moneyAmount" type="number" min="1" step="1000" inputmode="numeric" placeholder="Contoh: 170000" required></div>
+        <div class="form-group"><label for="moneyAmount">Nominal (Rp)</label><input class="field" id="moneyAmount" type="text" inputmode="numeric" placeholder="Contoh: 170000" required></div>
         <div class="input-row">
           <div class="form-group"><label for="moneyDate">Tanggal</label><input class="field" id="moneyDate" type="date" required></div>
           <div class="form-group"><label for="moneyCategory">Kategori</label><select class="field" id="moneyCategory"><option>Gaji harian</option><option>Pendapatan tambahan</option><option>Bonus</option><option>Lainnya</option></select></div>
@@ -95,7 +95,7 @@
         <button class="quick" data-amount="200000">Rp200 rb<small>Setoran ekstra</small></button>
       </div>
       <form id="depositForm">
-        <div class="form-group"><label for="amount">Nominal setoran (Rp)</label><input class="field" id="amount" type="number" min="1" step="1000" inputmode="numeric" placeholder="Contoh: 100000" required></div>
+        <div class="form-group"><label for="amount">Nominal setoran (Rp)</label><input class="field" id="amount" type="text" inputmode="numeric" placeholder="Contoh: 100000" required></div>
         <div class="input-row">
           <div class="form-group"><label for="date">Tanggal</label><input class="field" id="date" type="date" required></div>
           <div class="form-group"><label for="category">Keterangan</label><select class="field" id="category"><option>Tabungan gaji</option><option>Tabungan ekstra</option><option>Bonus</option><option>Lainnya</option></select></div>
@@ -116,8 +116,8 @@
   <div class="modal">
     <h2 id="modalTitle">Pengaturan tabungan</h2>
     <p>Atur target tabungan sesuai kebutuhan. Nilai yang sudah dicatat tidak akan berubah.</p>
-    <div class="form-group"><label for="targetInput">Target tabungan (Rp)</label><input class="field" id="targetInput" type="number" min="1" step="100000" inputmode="numeric"></div>
-    <div class="form-group"><label for="startingInput">Saldo awal (Rp) — opsional</label><input class="field" id="startingInput" type="number" min="0" step="1000" inputmode="numeric"></div>
+    <div class="form-group"><label for="targetInput">Target tabungan (Rp)</label><input class="field" id="targetInput" type="text" inputmode="numeric"></div>
+    <div class="form-group"><label for="startingInput">Saldo awal (Rp) — opsional</label><input class="field" id="startingInput" type="text" inputmode="numeric"></div>
     <div class="modal-actions"><button class="secondary" id="cancelSettings">Batal</button><button class="primary" id="saveSettings" style="margin:0">Simpan</button></div>
     <button class="text-btn" id="resetBtn" style="color:var(--red);margin-top:12px">Hapus semua data tabungan</button>
   </div>
@@ -165,6 +165,7 @@
   $("incomeTab").addEventListener("click",()=>setMoneyType("income"));
   $("expenseTab").addEventListener("click",()=>setMoneyType("expense"));
 
+  function parseMoney(value){ return Number(String(value).replace(/[^0-9]/g, "")); }
   function save(){ try { localStorage.setItem(KEY, JSON.stringify(state)); } catch(e) { toast("Gagal menyimpan data di browser"); } }
   function total(){ return state.starting + state.entries.reduce((sum,e)=>sum+e.amount,0); }
   function toast(msg){ const t=$("toast");t.textContent=msg;t.classList.add("show");setTimeout(()=>t.classList.remove("show"),2100); }
@@ -199,13 +200,13 @@
   }
   function escapeHTML(s){return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
   $("moneyForm").addEventListener("submit",e=>{
-    e.preventDefault();const n=Math.floor(Number(moneyAmount.value));
+    e.preventDefault();const n=Math.floor(parseMoney(moneyAmount.value));
     if(!Number.isFinite(n)||n<1){toast("Masukkan nominal yang benar");return;}
     const record={id:Date.now().toString(36)+Math.random().toString(36).slice(2,6),amount:n,date:moneyDate.value||today(),category:moneyCategory.value,note:$("moneyNote").value.trim(),created:Date.now()};
     (moneyType==="income"?state.incomes:state.expenses).push(record);save();render();moneyAmount.value="";$("moneyNote").value="";toast(moneyType==="income"?"Pendapatan dicatat":"Pengeluaran dicatat");
   });
   $("depositForm").addEventListener("submit",e=>{
-    e.preventDefault();const n=Math.floor(Number(amount.value));
+    e.preventDefault();const n=Math.floor(parseMoney(amount.value));
     if(!Number.isFinite(n)||n<1){toast("Masukkan nominal yang benar");return;}
     state.entries.push({id:Date.now().toString(36)+Math.random().toString(36).slice(2,6),amount:n,date:date.value||today(),category:$("category").value,created:Date.now()});
     save();render();amount.value="";document.querySelectorAll(".quick").forEach(b=>b.classList.remove("active"));toast("Setoran berhasil dicatat");
@@ -214,7 +215,7 @@
   $("cancelSettings").addEventListener("click",()=>$("modalBack").classList.remove("open"));
   $("modalBack").addEventListener("click",e=>{if(e.target===$("modalBack"))$("modalBack").classList.remove("open");});
   $("saveSettings").addEventListener("click",()=>{
-    const t=Number($("targetInput").value),s=Number($("startingInput").value);
+    const t=parseMoney($("targetInput").value),s=parseMoney($("startingInput").value);
     if(!Number.isFinite(t)||t<1||!Number.isFinite(s)||s<0){toast("Periksa target dan saldo awal");return;}
     state.target=Math.floor(t);state.starting=Math.floor(s);save();render();$("modalBack").classList.remove("open");toast("Pengaturan disimpan");
   });
